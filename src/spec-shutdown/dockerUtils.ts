@@ -247,10 +247,11 @@ export async function dockerBuildKitVersion(params: DockerCLIParameters | Partia
 	}
 }
 
-export async function dockerCLI(params: DockerCLIParameters | PartialExecParameters | DockerResolverParameters, ...args: string[]) {
+export async function dockerCLI(params: DockerCLIParameters | PartialExecParameters | DockerResolverParameters, cwd?: string, ...args: string[]) {
 	const partial = toExecParameters(params);
 	return runCommandNoPty({
 		...partial,
+		cwd: cwd,
 		args: (partial.args || []).concat(args),
 	});
 }
@@ -286,10 +287,11 @@ export async function isPodman(params: DockerCLIParameters | DockerResolverParam
 	}
 }
 
-export async function dockerPtyCLI(params: PartialPtyExecParameters | DockerResolverParameters | DockerCLIParameters, ...args: string[]) {
+export async function dockerPtyCLI(params: PartialPtyExecParameters | DockerResolverParameters | DockerCLIParameters, cwd?: string, ...args: string[]) {
 	const partial = toPtyExecParameters(params);
 	return runCommand({
 		...partial,
+		cwd: cwd,
 		args: (partial.args || []).concat(args),
 	});
 }

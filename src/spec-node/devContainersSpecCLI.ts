@@ -574,15 +574,7 @@ async function doBuild({
 
 			// Build the base image and extend with features etc.
 			let { updatedImageName } = await buildNamedImageAndExtend(params, configWithRaw as SubstitutedConfig<DevContainerFromDockerfileConfig>, additionalFeatures, false, imageNames);
-
-			if (imageNames) {
-				if (!buildxPush && !buildxOutput) {
-					await Promise.all(imageNames.map(imageName => dockerPtyCLI(params, 'tag', updatedImageName[0], imageName)));
-				}
-				imageNameResult = imageNames;
-			} else {
-				imageNameResult = updatedImageName;
-			}
+			imageNameResult = updatedImageName;
 		} else if ('dockerComposeFile' in config) {
 
 			if (buildxPlatform || buildxPush) {
