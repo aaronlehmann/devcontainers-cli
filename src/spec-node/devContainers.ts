@@ -17,7 +17,6 @@ import { LogLevel, LogDimensions, toErrorText, createCombinedLog, createTerminal
 import { dockerComposeCLIConfig } from './dockerCompose';
 import { Mount } from '../spec-configuration/containerFeaturesConfiguration';
 import { getPackageConfig, PackageConfiguration } from '../spec-utils/product';
-import { dockerBuildKitVersion } from '../spec-shutdown/dockerUtils';
 
 export const experimentalImageMetadataDefault = true;
 
@@ -142,13 +141,7 @@ export async function createDockerParams(options: ProvisionOptions, disposables:
 		env: cliHost.env,
 		output: common.output,
 	}, dockerPath, dockerComposePath);
-	const buildKitVersion = options.useBuildKit === 'never' ? null : (await dockerBuildKitVersion({
-		cliHost,
-		dockerCLI: dockerPath,
-		dockerComposeCLI,
-		env: cliHost.env,
-		output
-	}));
+	const buildKitVersion = options.useBuildKit === 'never' ? null : 'v0.10.0';
 	return {
 		common,
 		parsedAuthority,
