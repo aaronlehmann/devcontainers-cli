@@ -18,6 +18,47 @@ describe('Test OCI Pull', () => {
         assert.equal(feat.path, 'codspace/features/ruby');
     });
 
+    it('Parse non-namespaced OCI identifier', async () => {
+        const feat = getRef(output, 'ghcr.io/ruby:1');
+        output.write(`feat: ${JSON.stringify(feat)}`);
+
+        assert.equal(feat.id, 'ruby');
+        assert.equal(feat.namespace, '');
+        assert.equal(feat.owner, 'ruby');
+        assert.equal(feat.registry, 'ghcr.io');
+        assert.equal(feat.resource, 'ghcr.io/ruby');
+        assert.equal(feat.version, '1');
+        assert.equal(feat.path, 'ruby');
+    });
+
+
+    it('Parse OCI identifier with registry port', async () => {
+        const feat = getRef(output, 'ghcr.io:5000/codspace/features/ruby');
+        output.write(`feat: ${JSON.stringify(feat)}`);
+
+        assert.equal(feat.id, 'ruby');
+        assert.equal(feat.namespace, 'codspace/features');
+        assert.equal(feat.owner, 'codspace');
+        assert.equal(feat.registry, 'ghcr.io:5000');
+        assert.equal(feat.resource, 'ghcr.io:5000/codspace/features/ruby');
+        assert.equal(feat.version, 'latest');
+        assert.equal(feat.path, 'codspace/features/ruby');
+    });
+
+    it('Parse OCI identifier with registry port and tag', async () => {
+        const feat = getRef(output, 'ghcr.io:5000/codspace/features/ruby:1');
+        output.write(`feat: ${JSON.stringify(feat)}`);
+
+        assert.equal(feat.id, 'ruby');
+        assert.equal(feat.namespace, 'codspace/features');
+        assert.equal(feat.owner, 'codspace');
+        assert.equal(feat.registry, 'ghcr.io:5000');
+        assert.equal(feat.resource, 'ghcr.io:5000/codspace/features/ruby');
+        assert.equal(feat.version, '1');
+        assert.equal(feat.path, 'codspace/features/ruby');
+    });
+
+
     it('Get a manifest by tag', async () => {
         const featureRef = getRef(output, 'ghcr.io/codspace/features/ruby:1.0.13');
         const manifest = await getManifest(output, process.env, 'https://ghcr.io/v2/codspace/features/ruby/manifests/1.0.13', featureRef);

@@ -62,18 +62,18 @@ export function getRef(output: Log, resourceAndVersion: string): OCIRef {
 
 	// ex: ghcr.io/codspace/features/ruby:1
 	// ex: ghcr.io/codspace/templates/ruby:1
-	const splitOnColon = resourceAndVersion.split(':');
-	const resource = splitOnColon[0];
+	const splitOnSlash = resourceAndVersion.split('/');
+	const owner = splitOnSlash[1].split(':')[0];
+	const registry = splitOnSlash[0];
+	const namespaceComponents = splitOnSlash.slice(1, -1);
+	const namespace = namespaceComponents.join('/');
+
+	const splitOnColon = splitOnSlash[splitOnSlash.length - 1].split(':');
+	const id = splitOnColon[0];  // Aka 'featureName' - Eg: 'ruby'
+	const resource = [registry].concat(namespaceComponents, id).join('/')
 	const version = splitOnColon[1] ? splitOnColon[1] : 'latest';
 
-	const splitOnSlash = resource.split('/');
-
-	const id = splitOnSlash[splitOnSlash.length - 1]; // Aka 'featureName' - Eg: 'ruby'
-	const owner = splitOnSlash[1];
-	const registry = splitOnSlash[0];
-	const namespace = splitOnSlash.slice(1, -1).join('/');
-
-	const path = `${namespace}/${id}`;
+	const path = namespaceComponents.concat(id).join('/')
 
 	output.write(`resource: ${resource}`, LogLevel.Trace);
 	output.write(`id: ${id}`, LogLevel.Trace);
