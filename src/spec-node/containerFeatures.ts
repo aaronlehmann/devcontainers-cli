@@ -17,7 +17,6 @@ import { createFeaturesTempFolder, DockerResolverParameters, getCacheFolder, get
 import { isEarlierVersion, parseVersion } from '../spec-common/commonUtils';
 import { getContainerEnvMetadata, getDevcontainerMetadata, getDevcontainerMetadataLabel, getImageBuildInfoFromImage, ImageBuildInfo, ImageMetadataEntry, imageMetadataLabel, MergedDevContainerConfig } from './imageMetadata';
 import { supportsBuildContexts } from './dockerfileUtils';
-import { ContainerError } from '../spec-common/errors';
 
 // Escapes environment variable keys.
 //
@@ -30,7 +29,7 @@ export const getSafeId = (str: string) => str
 	.replace(/^[\d_]+/g, '_')
 	.toUpperCase();
 
-export async function extendImage(params: DockerResolverParameters, config: SubstitutedConfig<DevContainerConfig>, imageName: string, additionalFeatures: Record<string, string | boolean | Record<string, string | boolean>>, canAddLabelsToContainer: boolean) {
+export async function extendImage(params: DockerResolverParameters, config: SubstitutedConfig<DevContainerConfig>, imageName: string, additionalFeatures: Record<string, string | boolean | Record<string, string | boolean>>, canAddLabelsToContainer: boolean, imageNames: string[]) {
 	const { common } = params;
 	const { cliHost, output } = common;
 
@@ -53,42 +52,13 @@ export async function extendImage(params: DockerResolverParameters, config: Subs
 	const folderImageName = getFolderImageName(common);
 	const updatedImageName = `${imageName.startsWith(folderImageName) ? imageName : folderImageName}-features`;
 
-	const args: string[] = [];
-	if (!params.buildKitVersion &&
-		(params.buildxPlatform || params.buildxPush)) {
-		throw new ContainerError({ description: '--platform or --push require BuildKit enabled.', data: { fileWithError: dockerfilePath } });
-	}
-	if (params.buildKitVersion) {
-		args.push('buildx', 'build');
-
-		// --platform
-		if (params.buildxPlatform) {
-			output.write('Setting BuildKit platform(s): ' + params.buildxPlatform, LogLevel.Trace);
-			args.push('--platform', params.buildxPlatform);
-		}
-
-		// --push/--output
-		if (params.buildxPush) {
-			args.push('--push');
-		} else {
-			if (params.buildxOutput) {
-				args.push('--output', params.buildxOutput);
-			} else {
-				args.push('--load'); // (short for --output=docker, i.e. load into normal 'docker images' collection)
-			}
-		}
-
-		for (const buildContext in featureBuildInfo.buildKitContexts) {
-			args.push('--build-context', `${buildContext}=${featureBuildInfo.buildKitContexts[buildContext]}`);
-		}
-	} else {
-		// Not using buildx
-		args.push(
-			'build',
-		);
+	const args: string[] = ['build'];
+	imageNames.map(imageName => args.push('--image-name', imageName));
+	for (const buildContext in featureBuildInfo.buildKitContexts) {
+		args.push('--build-context', `${buildContext}=${featureBuildInfo.buildKitContexts[buildContext]}`);
 	}
 	for (const buildArg in featureBuildInfo.buildArgs) {
-		args.push('--build-arg', `${buildArg}=${featureBuildInfo.buildArgs[buildArg]}`);
+		args.push('--param', `${buildArg}=${featureBuildInfo.buildArgs[buildArg]}`);
 	}
 	// Once this is step merged with the user Dockerfile (or working against the base image),
 	// the path will be the dev container context
@@ -97,22 +67,21 @@ export async function extendImage(params: DockerResolverParameters, config: Subs
 	cliHost.mkdirp(emptyTempDir);
 	args.push(
 		'--target', featureBuildInfo.overrideTarget,
-		'-t', updatedImageName,
-		'-f', dockerfilePath,
-		emptyTempDir
+		'--dockerfile', dockerfilePath,
+		'--build-path', emptyTempDir
 	);
 
+	params.dockerCLI = 'newt';
 	if (params.isTTY) {
 		const infoParams = { ...toPtyExecParameters(params), output: makeLog(output, LogLevel.Info) };
-		await dockerPtyCLI(infoParams, ...args);
+		await dockerPtyCLI(infoParams, process.cwd(), ...args);
 	} else {
 		const infoParams = { ...toExecParameters(params), output: makeLog(output, LogLevel.Info), print: 'continuous' as 'continuous' };
-		await dockerCLI(infoParams, ...args);
+		await dockerCLI(infoParams, process.cwd(), ...args);
 	}
 	return {
 		updatedImageName: [ updatedImageName ],
 		imageMetadata: getDevcontainerMetadata(imageBuildInfo.metadata, config, featuresConfig),
-		imageDetails: async () => imageBuildInfo.imageDetails,
 	};
 }
 

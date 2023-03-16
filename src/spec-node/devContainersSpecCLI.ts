@@ -15,7 +15,7 @@ import { ContainerError } from '../spec-common/errors';
 import { Log, LogDimensions, LogLevel, makeLog, mapLogLevel } from '../spec-utils/log';
 import { probeRemoteEnv, runLifecycleHooks, runRemoteCommand, UserEnvProbe, setupInContainer } from '../spec-common/injectHeadless';
 import { extendImage } from './containerFeatures';
-import { DockerCLIParameters, dockerPtyCLI, inspectContainer } from '../spec-shutdown/dockerUtils';
+import { DockerCLIParameters, inspectContainer } from '../spec-shutdown/dockerUtils';
 import { buildAndExtendDockerCompose, dockerComposeCLIConfig, getDefaultImageName, getProjectName, readDockerComposeConfig, readVersionPrefix } from './dockerCompose';
 import { DevContainerConfig, DevContainerFromDockerComposeConfig, DevContainerFromDockerfileConfig, getDockerComposeFilePaths } from '../spec-configuration/configuration';
 import { workspaceFromPath } from '../spec-utils/workspaces';
@@ -506,6 +506,9 @@ async function doBuild({
 	const dispose = async () => {
 		await Promise.all(disposables.map(d => d()));
 	};
+	// Support multiple use of `--image-name`
+	const imageNames = (Array.isArray(argImageName) ? argImageName : [argImageName]) as string[]
+
 	try {
 		const workspaceFolder = path.resolve(process.cwd(), workspaceFolderArg);
 		const configFile: URI | undefined = /* config ? URI.file(path.resolve(process.cwd(), config)) : */ undefined; // TODO
@@ -567,9 +570,6 @@ async function doBuild({
 			throw new ContainerError({ description: '--push true cannot be used with --output.' });
 		}
 
-		// Support multiple use of `--image-name`
-		const imageNames = (argImageName && (Array.isArray(argImageName) ? argImageName : [argImageName]) as string[]) || undefined;
-
 		if (isDockerFileConfig(config)) {
 
 			// Build the base image and extend with features etc.
@@ -612,7 +612,6 @@ async function doBuild({
 			const originalImageName = overrideImageName || service.image || getDefaultImageName(await buildParams.dockerComposeCLI(), projectName, config.service);
 
 			if (imageNames) {
-				await Promise.all(imageNames.map(imageName => dockerPtyCLI(params, 'tag', originalImageName, imageName)));
 				imageNameResult = imageNames;
 			} else {
 				imageNameResult = originalImageName;
@@ -624,10 +623,9 @@ async function doBuild({
 			}
 
 			await inspectDockerImage(params, config.image, true);
-			const { updatedImageName } = await extendImage(params, configWithRaw, config.image, additionalFeatures, false);
+			const { updatedImageName } = await extendImage(params, configWithRaw, config.image, additionalFeatures, false, imageNames);
 
 			if (imageNames) {
-				await Promise.all(imageNames.map(imageName => dockerPtyCLI(params, 'tag', updatedImageName[0], imageName)));
 				imageNameResult = imageNames;
 			} else {
 				imageNameResult = updatedImageName;
