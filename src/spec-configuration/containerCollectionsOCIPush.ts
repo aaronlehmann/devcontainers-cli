@@ -50,7 +50,7 @@ export async function pushOCIFeatureOrTemplate(params: CommonParams, ociRef: OCI
 		{
 			name: 'configLayer',
 			digest: manifest.manifestObj.config.digest,
-			contents: Buffer.alloc(0),
+			contents: Buffer.alloc(10, 'a'),
 			size: manifest.manifestObj.config.size,
 		},
 		{
@@ -125,7 +125,7 @@ export async function pushCollectionMetadata(params: CommonParams, collectionRef
 			name: 'configLayer',
 			digest: manifest.manifestObj.config.digest,
 			size: manifest.manifestObj.config.size,
-			contents: Buffer.alloc(0),
+			contents: Buffer.alloc(10, 'a'),
 		},
 		{
 			name: 'collectionLayer',
@@ -392,8 +392,8 @@ export async function calculateManifestAndContentDigest(output: Log, dataLayer: 
 		mediaType: 'application/vnd.oci.image.manifest.v1+json',
 		config: {
 			mediaType: 'application/vnd.devcontainers',
-			digest: 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', // A zero byte digest for the devcontainer mediaType.
-			size: 0
+			digest: 'sha256:bf2cb58a68f684d95a3b78ef8f661c9a4e5b09e82cc8f9cc88cce90528caeb27', // A 10 byte digest of 'a's for the devcontainer mediaType.
+			size: 10
 		},
 		layers: [
 			dataLayer
