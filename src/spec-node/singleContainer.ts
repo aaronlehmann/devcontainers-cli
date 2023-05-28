@@ -4,13 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 
-import { createContainerProperties, startEventSeen, ResolverResult, getTunnelInformation, getDockerfilePath, getDockerContextPath, DockerResolverParameters, isDockerFileConfig, uriToWSLFsPath, WorkspaceConfiguration, getFolderImageName, inspectDockerImage, logUMask, SubstitutedConfig, checkDockerSupportForGPU } from './utils';
+import { createContainerProperties, startEventSeen, ResolverResult, getTunnelInformation, getDockerfilePath, getDockerContextPath, DockerResolverParameters, isDockerFileConfig, uriToWSLFsPath, WorkspaceConfiguration, getFolderImageName, SubstitutedConfig, checkDockerSupportForGPU } from './utils';
 import { ContainerProperties, setupInContainer, ResolverProgress, ResolverParameters } from '../spec-common/injectHeadless';
 import { ContainerError, toErrorText } from '../spec-common/errors';
 import { ContainerDetails, listContainers, DockerCLIParameters, inspectContainers, dockerCLI, dockerPtyCLI, toPtyExecParameters, ImageDetails, toExecParameters } from '../spec-shutdown/dockerUtils';
 import { DevContainerConfig, DevContainerFromDockerfileConfig, DevContainerFromImageConfig } from '../spec-configuration/configuration';
 import { LogLevel, Log, makeLog } from '../spec-utils/log';
-import { extendImage, getExtendImageBuildInfo, updateRemoteUserUID } from './containerFeatures';
+import { extendImage, getExtendImageBuildInfo } from './containerFeatures';
 import { getDevcontainerMetadata, getImageBuildInfoFromDockerfile, getImageMetadataFromContainer, ImageMetadataEntry, mergeConfiguration, MergedDevContainerConfig } from './imageMetadata';
 import { ensureDockerfileHasFinalStageName } from './dockerfileUtils';
 
@@ -40,24 +40,7 @@ export async function openDockerfileDevContainer(params: DockerResolverParameter
 			const imageMetadata = getImageMetadataFromContainer(container, configWithRaw, undefined, idLabels, common.experimentalImageMetadata, common.output).config;
 			mergedConfig = mergeConfiguration(config, imageMetadata);
 		} else {
-			const res = await buildNamedImageAndExtend(params, configWithRaw, additionalFeatures, true);
-			const imageMetadata = res.imageMetadata.config;
-			mergedConfig = mergeConfiguration(config, imageMetadata);
-			const { containerUser } = mergedConfig;
-			const updatedImageName = await updateRemoteUserUID(params, mergedConfig, res.updatedImageName[0], res.imageDetails, findUserArg(config.runArgs) || containerUser);
-
-			// collapsedFeaturesConfig = async () => res.collapsedFeaturesConfig;
-
-			try {
-				await spawnDevContainer(params, config, mergedConfig, updatedImageName, idLabels, workspaceConfig.workspaceMount, res.imageDetails, containerUser, res.labels || {});
-			} finally {
-				// In 'finally' because 'docker run' can fail after creating the container.
-				// Trying to get it here, so we can offer 'Rebuild Container' as an action later.
-				container = await findDevContainer(params, idLabels);
-			}
-			if (!container) {
-				return bailOut(common.output, 'Dev container not found.');
-			}
+			return bailOut(common.output, 'Code removed.');
 		}
 
 		containerProperties = await createContainerProperties(params, container.Id, workspaceConfig.workspaceFolder, mergedConfig.remoteUser);
@@ -110,7 +93,7 @@ async function setupContainer(container: ContainerDetails, params: DockerResolve
 function getDefaultName(config: DevContainerFromDockerfileConfig | DevContainerFromImageConfig, params: DockerResolverParameters) {
 	return 'image' in config ? config.image : getFolderImageName(params.common);
 }
-export async function buildNamedImageAndExtend(params: DockerResolverParameters, configWithRaw: SubstitutedConfig<DevContainerFromDockerfileConfig | DevContainerFromImageConfig>, additionalFeatures: Record<string, string | boolean | Record<string, string | boolean>>, canAddLabelsToContainer: boolean, argImageNames?: string[]): Promise<{ updatedImageName: string[]; imageMetadata: SubstitutedConfig<ImageMetadataEntry[]>; imageDetails: () => Promise<ImageDetails>; labels?: Record<string, string> }> {
+export async function buildNamedImageAndExtend(params: DockerResolverParameters, configWithRaw: SubstitutedConfig<DevContainerFromDockerfileConfig | DevContainerFromImageConfig>, additionalFeatures: Record<string, string | boolean | Record<string, string | boolean>>, canAddLabelsToContainer: boolean, argImageNames?: string[]): Promise<{ updatedImageName: string[]; imageMetadata: SubstitutedConfig<ImageMetadataEntry[]>; labels?: Record<string, string> }> {
 	const { config } = configWithRaw;
 	const imageNames = argImageNames ?? [getDefaultName(config, params)];
 	params.common.progress(ResolverProgress.BuildingImage);
@@ -167,90 +150,46 @@ async function buildAndExtendImage(buildParams: DockerResolverParameters, config
 			additionalBuildArgs.push('--build-context', `${buildContext}=${featureBuildInfo.buildKitContexts[buildContext]}`);
 		}
 		for (const buildArg in featureBuildInfo.buildArgs) {
-			additionalBuildArgs.push('--build-arg', `${buildArg}=${featureBuildInfo.buildArgs[buildArg]}`);
+			additionalBuildArgs.push('--param', `${buildArg}=${featureBuildInfo.buildArgs[buildArg]}`);
 		}
 	}
 
-	const args: string[] = [];
-	if (!buildParams.buildKitVersion &&
-		(buildParams.buildxPlatform || buildParams.buildxPush)) {
-		throw new ContainerError({ description: '--platform or --push require BuildKit enabled.', data: { fileWithError: dockerfilePath } });
-	}
-	if (buildParams.buildKitVersion) {
-		args.push('buildx', 'build');
-		if (buildParams.buildxPlatform) {
-			args.push('--platform', buildParams.buildxPlatform);
-		}
-		if (buildParams.buildxPush) {
-			args.push('--push');
-		} else {
-			if (buildParams.buildxOutput) { 
-				args.push('--output', buildParams.buildxOutput);
-			} else {
-				args.push('--load'); // (short for --output=docker, i.e. load into normal 'docker images' collection)
-			}
-		}
-		args.push('--build-arg', 'BUILDKIT_INLINE_CACHE=1');
-	} else {
-		args.push('build');
-	}
-	args.push('-f', finalDockerfilePath);
+	const args: string[] = ['build'];
+	args.push('--dockerfile', finalDockerfilePath);
 
-	baseImageNames.map(imageName => args.push('-t', imageName));
+	baseImageNames.map(imageName => args.push('--image-name', imageName));
 
 	const target = extendImageBuildInfo?.featureBuildInfo ? extendImageBuildInfo.featureBuildInfo.overrideTarget : config.build?.target;
 	if (target) {
 		args.push('--target', target);
 	}
-	if (noCache) {
-		args.push('--no-cache');
-		// `docker build --pull` pulls local image: https://github.com/devcontainers/cli/issues/60
-		if (buildParams.buildKitVersion || !extendImageBuildInfo) {
-			args.push('--pull');
-		}
-	} else {
-		const configCacheFrom = config.build?.cacheFrom;
-		if (buildParams.additionalCacheFroms.length || (configCacheFrom && (configCacheFrom === 'string' || configCacheFrom.length))) {
-			await logUMask(buildParams);
-		}
-		buildParams.additionalCacheFroms.forEach(cacheFrom => args.push('--cache-from', cacheFrom));
-		if (config.build && config.build.cacheFrom) {
-			if (typeof config.build.cacheFrom === 'string') {
-				args.push('--cache-from', config.build.cacheFrom);
-			} else {
-				for (let index = 0; index < config.build.cacheFrom.length; index++) {
-					const cacheFrom = config.build.cacheFrom[index];
-					args.push('--cache-from', cacheFrom);
-				}
-			}
-		}
+	if (!noCache) {
+		args.push('--cache');
 	}
 	const buildArgs = config.build?.args;
 	if (buildArgs) {
 		for (const key in buildArgs) {
-			args.push('--build-arg', `${key}=${buildArgs[key]}`);
+			args.push('--param', `${key}=${buildArgs[key]}`);
 		}
 	}
 	args.push(...additionalBuildArgs);
-	args.push(await uriToWSLFsPath(getDockerContextPath(cliHost, config), cliHost));
+	args.push('--build-path', await uriToWSLFsPath(getDockerContextPath(cliHost, config), cliHost));
 	try {
+		buildParams.dockerCLI = 'newt';
 		if (buildParams.isTTY) {
 			const infoParams = { ...toPtyExecParameters(buildParams), output: makeLog(output, LogLevel.Info) };
-			await dockerPtyCLI(infoParams, ...args);
+			await dockerPtyCLI(infoParams, process.cwd(), ...args);
 		} else {
 			const infoParams = { ...toExecParameters(buildParams), output: makeLog(output, LogLevel.Info), print: 'continuous' as 'continuous' };
-			await dockerCLI(infoParams, ...args);
+			await dockerCLI(infoParams, process.cwd(), ...args);
 		}
 	} catch (err) {
 		throw new ContainerError({ description: 'An error occurred building the image.', originalError: err, data: { fileWithError: dockerfilePath } });
 	}
 
-	const imageDetails = () => inspectDockerImage(buildParams, baseImageNames[0], false);
-
 	return {
 		updatedImageName: baseImageNames,
 		imageMetadata: getDevcontainerMetadata(imageBuildInfo.metadata, configWithRaw, extendImageBuildInfo?.featuresConfig),
-		imageDetails
 	};
 }
 

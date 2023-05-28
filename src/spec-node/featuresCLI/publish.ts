@@ -12,7 +12,7 @@ import { loadNativeModule } from '../../spec-common/commonUtils';
 import { PackageCommandInput } from '../collectionCommonUtils/package';
 import { OCICollectionFileName } from '../collectionCommonUtils/packageCommandImpl';
 import { publishOptions } from '../collectionCommonUtils/publish';
-import { getRef, OCICollectionRef } from '../../spec-configuration/containerCollectionsOCI';
+import { getCollectionRef, getRef, OCICollectionRef } from '../../spec-configuration/containerCollectionsOCI';
 import { doPublishCommand, doPublishMetadata } from '../collectionCommonUtils/publishCommandImpl';
 
 const collectionType = 'feature';
@@ -77,16 +77,27 @@ async function featuresPublish({
 
         const resource = `${registry}/${namespace}/${f.id}`;
         const featureRef = getRef(output, resource);
-        await doPublishCommand(f.version, featureRef, outputDir, output, collectionType);
+        if (!featureRef) {
+            output.write(`(!) Could not parse provided Feature identifier: '${resource}'`, LogLevel.Error);
+            process.exit(1);
+        }
+
+        if (! await doPublishCommand(f.version, featureRef, outputDir, output, collectionType)) {
+            output.write(`(!) ERR: Failed to publish '${resource}'`, LogLevel.Error);
+            process.exit(1);
+        }
     }
 
-    const featureCollectionRef: OCICollectionRef = {
-        registry: registry,
-        path: namespace,
-        version: 'latest'
-    };
+    const featureCollectionRef: OCICollectionRef | undefined = getCollectionRef(output, registry, namespace);
+    if (!featureCollectionRef) {
+        output.write(`(!) Could not parse provided collection identifier with registry '${registry}' and namespace '${namespace}'`, LogLevel.Error);
+        process.exit(1);
+    }
 
-    await doPublishMetadata(featureCollectionRef, outputDir, output, collectionType);
+    if (! await doPublishMetadata(featureCollectionRef, outputDir, output, collectionType)) {
+        output.write(`(!) ERR: Failed to publish '${featureCollectionRef.registry}/${featureCollectionRef.path}'`, LogLevel.Error);
+        process.exit(1);
+    }
 
     // Cleanup
     await rmLocal(outputDir, { recursive: true, force: true });
