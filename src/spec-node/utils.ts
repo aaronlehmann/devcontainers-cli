@@ -15,7 +15,7 @@ import { ContainerProperties, getContainerProperties, ResolverParameters } from 
 import { Workspace } from '../spec-utils/workspaces';
 import { URI } from 'vscode-uri';
 import { ShellServer } from '../spec-common/shellServer';
-import { inspectContainer, inspectImage, getEvents, ContainerDetails, DockerCLIParameters, dockerExecFunction, dockerPtyCLI, dockerPtyExecFunction, toDockerImageName, DockerComposeCLI, ImageDetails, dockerCLI } from '../spec-shutdown/dockerUtils';
+import { inspectContainer, getEvents, ContainerDetails, DockerCLIParameters, dockerExecFunction, dockerPtyExecFunction, toDockerImageName, DockerComposeCLI, ImageDetails, dockerCLI } from '../spec-shutdown/dockerUtils';
 import { getRemoteWorkspaceFolder } from './dockerCompose';
 import { findGitRootFolder } from '../spec-common/git';
 import { parentURI, uriToFsPath } from '../spec-configuration/configurationCommonUtils';
@@ -202,33 +202,10 @@ export async function checkDockerSupportForGPU(params: DockerCLIParameters | Doc
 	return runtimeFound;
 }
 
-export async function inspectDockerImage(params: DockerResolverParameters | DockerCLIParameters, imageName: string, pullImageOnError: boolean) {
-	try {
-		return await inspectImage(params, imageName);
-	} catch (err) {
-		if (!pullImageOnError) {
-			throw err;
-		}
-		const cliHost = 'cliHost' in params ? params.cliHost : params.common.cliHost;
-		const output = 'cliHost' in params ? params.output : params.common.output;
-		try {
-			return await inspectImageInRegistry(output, { arch: cliHost.arch, os: cliHost.platform }, imageName);
-		} catch (err2) {
-			output.write(`Error fetching image details: ${err2?.message}`);
-		}
-		try {
-			await retry(async () => dockerPtyCLI(params, 'pull', imageName), { maxRetries: 5, retryIntervalMilliseconds: 1000, output });
-		} catch (_err) {
-			if (err.stdout) {
-				output.write(err.stdout.toString());
-			}
-			if (err.stderr) {
-				output.write(toErrorText(err.stderr.toString()));
-			}
-			throw err;
-		}
-		return inspectImage(params, imageName);
-	}
+export async function inspectDockerImage(params: DockerResolverParameters | DockerCLIParameters, imageName: string, _: boolean) {
+	const cliHost = 'cliHost' in params ? params.cliHost : params.common.cliHost;
+	const output = 'cliHost' in params ? params.output : params.common.output;
+	return await inspectImageInRegistry(output, { arch: cliHost.arch, os: cliHost.platform }, imageName);
 }
 
 export async function inspectImageInRegistry(output: Log, platformInfo: { arch: NodeJS.Architecture; os: NodeJS.Platform }, name: string): Promise<ImageDetails> {
