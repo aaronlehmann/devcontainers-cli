@@ -507,7 +507,7 @@ async function doBuild({
 		await Promise.all(disposables.map(d => d()));
 	};
 	// Support multiple use of `--image-name`
-	const imageNames = (Array.isArray(argImageName) ? argImageName : [argImageName]) as string[]
+	const imageNames = (Array.isArray(argImageName) ? argImageName : [argImageName]) as string[];
 
 	try {
 		const workspaceFolder = path.resolve(process.cwd(), workspaceFolderArg);
